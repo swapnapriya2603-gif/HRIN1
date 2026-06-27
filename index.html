@@ -1,82 +1,89 @@
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>HR Analytics Assistant</title>
+  <title>HR Analytics AI</title>
 
   <style>
     body {
       font-family: Arial, sans-serif;
-      background: #f4f6f9;
+      background: #f4f7fb;
+      margin: 0;
       padding: 30px;
-      color: #222;
     }
 
     .container {
-      max-width: 1100px;
+      max-width: 1000px;
       margin: auto;
       background: white;
-      padding: 24px;
+      padding: 25px;
       border-radius: 12px;
-      box-shadow: 0 0 12px rgba(0,0,0,0.1);
+      box-shadow: 0 4px 14px rgba(0,0,0,0.1);
     }
 
     h1 {
-      margin-bottom: 20px;
+      text-align: center;
+      color: #1d3557;
     }
 
     label {
       font-weight: bold;
       display: block;
-      margin-top: 16px;
+      margin-top: 20px;
       margin-bottom: 8px;
     }
 
-    input, textarea {
+    input, textarea, button {
       width: 100%;
       padding: 12px;
       border-radius: 8px;
       border: 1px solid #ccc;
-      font-size: 14px;
+      box-sizing: border-box;
+      font-size: 15px;
     }
 
     textarea {
       min-height: 120px;
+      resize: vertical;
     }
 
     button {
-      margin-top: 20px;
-      background: #0b5cff;
+      background: #2563eb;
       color: white;
-      border: none;
-      padding: 14px 22px;
-      border-radius: 8px;
-      font-size: 16px;
+      font-weight: bold;
       cursor: pointer;
+      margin-top: 20px;
+      border: none;
     }
 
     button:hover {
-      background: #0047d6;
+      background: #1e40af;
     }
 
     #output {
       margin-top: 30px;
-      white-space: pre-wrap;
-      background: #f7f7f7;
+      background: #f8fafc;
       padding: 20px;
       border-radius: 10px;
-      border: 1px solid #ddd;
-      min-height: 200px;
+      white-space: pre-wrap;
+      line-height: 1.6;
+      border: 1px solid #dbeafe;
     }
 
     .loading {
-      color: #0b5cff;
+      color: #2563eb;
       font-weight: bold;
+    }
+
+    .small {
+      color: #666;
+      font-size: 13px;
+      margin-top: 5px;
     }
   </style>
 </head>
+
 <body>
 
 <div class="container">
@@ -84,18 +91,27 @@
   <h1>HR Analytics AI Assistant</h1>
 
   <label>Groq API Key</label>
-  <input type="password" id="groqKey" placeholder="Enter Groq API Key" />
+  <input type="password" id="apiKey" placeholder="Enter Groq API Key">
 
-  <label>Google Sheet URL</label>
-  <input type="text" id="sheetUrl"
-         placeholder="Paste Google Sheet URL" />
+  <label>Google Sheet Published URL</label>
+  <input
+    type="text"
+    id="sheetUrl"
+    value="https://docs.google.com/spreadsheets/d/e/2PACX-1vTKoh8d2RaxpwcT9BXtq3bqXQoVQKycqT6MAJ9VEpvqDUQ94JfFYp3QSQJaNucJiAxAOuYm_YZFyzZq/pubhtml"
+  >
+
+  <div class="small">
+    Use a Published Google Sheet URL
+  </div>
 
   <label>HR Analytics Prompt</label>
   <textarea id="prompt">
-Analyze employee attrition trends, department performance, hiring patterns, diversity metrics, and actionable HR recommendations.
+Analyze employee attrition, salary trends, department-wise performance, overtime impact, job satisfaction, and provide actionable HR insights.
   </textarea>
 
-  <button onclick="analyzeData()">Analyze HR Data</button>
+  <button onclick="analyzeSheet()">
+    Analyze HR Data
+  </button>
 
   <div id="output"></div>
 
@@ -103,40 +119,119 @@ Analyze employee attrition trends, department performance, hiring patterns, dive
 
 <script>
 
-function getGoogleSheetCSVUrl(sheetUrl) {
+async function analyzeSheet() {
 
-  // Case 1: Already a published CSV URL
-  if (
-    sheetUrl.includes("output=csv") ||
-    sheetUrl.includes("/pub?")
-  ) {
-    return sheetUrl;
+  const apiKey = document.getElementById("apiKey").value.trim();
+  const sheetUrl = document.getElementById("sheetUrl").value.trim();
+  const prompt = document.getElementById("prompt").value.trim();
+  const output = document.getElementById("output");
+
+  if (!apiKey || !sheetUrl || !prompt) {
+    alert("Please fill all fields");
+    return;
   }
 
-  // Case 2: Standard editable Google Sheet URL
-  const match = sheetUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+  output.innerHTML = "<div class='loading'>Loading Google Sheet data...</div>";
 
-  if (!match) {
-    throw new Error("Invalid Google Sheet URL");
+  try {
+
+    // Convert pubhtml → csv export
+    let csvUrl = convertGoogleSheetToCSV(sheetUrl);
+
+    // Fetch CSV data
+    const csvResponse = await fetch(csvUrl);
+    const csvText = await csvResponse.text();
+
+    // Parse CSV
+    const parsedData = parseCSV(csvText);
+
+    output.innerHTML = "<div class='loading'>Analyzing HR data with Groq AI...</div>";
+
+    // Build AI prompt
+    const systemPrompt = `
+You are an expert HR Analytics consultant.
+
+Analyze the HR dataset and provide:
+
+1. Attrition Analysis
+2. Department-wise Insights
+3. Salary & Compensation Patterns
+4. Overtime Impact
+5. Employee Satisfaction Trends
+6. Workforce Risk Areas
+7. Actionable HR Recommendations
+8. Executive Summary
+
+Dataset:
+${JSON.stringify(parsedData).slice(0, 120000)}
+
+User Request:
+${prompt}
+`;
+
+    // Call Groq API
+    const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          {
+            role: "user",
+            content: systemPrompt
+          }
+        ],
+        temperature: 0.4,
+        max_tokens: 3000
+      })
+    });
+
+    const result = await groqResponse.json();
+
+    if (result.error) {
+      throw new Error(result.error.message);
+    }
+
+    const aiText = result.choices[0].message.content;
+
+    output.innerHTML = `
+      <h2>HR Analytics Report</h2>
+      <div>${formatText(aiText)}</div>
+    `;
+
+  } catch (error) {
+
+    output.innerHTML = `
+      <div style="color:red;">
+        Error: ${error.message}
+      </div>
+    `;
   }
-
-  const sheetId = match[1];
-
-  return `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`;
 }
 
-function convertToCSVUrl(sheetUrl) {
-  const sheetId = extractSheetId(sheetUrl);
 
-  if (!sheetId) {
-    throw new Error("Invalid Google Sheet URL");
+// Convert Google Sheet Published URL to CSV Export URL
+function convertGoogleSheetToCSV(url) {
+
+  if (url.includes("pubhtml")) {
+    return url.replace("pubhtml", "pub?output=csv");
   }
 
-  return `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`;
+  if (url.includes("/edit")) {
+    return url.replace("/edit", "/export?format=csv");
+  }
+
+  return url;
 }
 
-function csvToJson(csv) {
-  const lines = csv.split("\n").filter(x => x.trim() !== "");
+
+// Simple CSV Parser
+function parseCSV(text) {
+
+  const lines = text.split("\n").filter(line => line.trim() !== "");
 
   const headers = lines[0]
     .split(",")
@@ -145,11 +240,12 @@ function csvToJson(csv) {
   const data = [];
 
   for (let i = 1; i < lines.length; i++) {
+
     const row = lines[i]
       .split(",")
-      .map(v => v.replace(/"/g, "").trim());
+      .map(c => c.replace(/"/g, "").trim());
 
-    let obj = {};
+    const obj = {};
 
     headers.forEach((header, index) => {
       obj[header] = row[index];
@@ -161,106 +257,16 @@ function csvToJson(csv) {
   return data;
 }
 
-async function analyzeData() {
 
-  const output = document.getElementById("output");
+// Basic formatting
+function formatText(text) {
 
-  try {
-
-    output.innerHTML =
-      '<div class="loading">Fetching Google Sheet data...</div>';
-
-    const groqKey =
-      document.getElementById("groqKey").value.trim();
-
-    const sheetUrl =
-      document.getElementById("sheetUrl").value.trim();
-
-    const userPrompt =
-      document.getElementById("prompt").value.trim();
-
-    if (!groqKey || !sheetUrl || !userPrompt) {
-      alert("Please fill all fields.");
-      return;
-    }
-
-    const csvUrl = getGoogleSheetCSVUrl(sheetUrl);
-
-const csvResponse = await fetch(csvUrl);
-
-if (!csvResponse.ok) {
-  throw new Error(
-    `Google Sheet fetch failed: ${csvResponse.status}`
-  );
-}
-
-const csvText = await csvResponse.text();
-
-console.log(csvText);
-
-    const csvText = await csvResponse.text();
-
-    const jsonData = csvToJson(csvText);
-
-    output.innerHTML =
-      '<div class="loading">Analyzing HR data with Groq...</div>';
-
-    const payload = {
-      model: "llama-3.3-70b-versatile",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are an expert HR Analytics consultant. Provide deep workforce insights, trends, KPIs, attrition analysis, hiring analytics, diversity analysis, employee engagement insights, and actionable recommendations."
-        },
-        {
-          role: "user",
-          content:
-            `
-            HR Dataset:
-            ${JSON.stringify(jsonData).slice(0, 120000)}
-
-            User Request:
-            ${userPrompt}
-            `
-        }
-      ],
-      temperature: 0.3
-    };
-
-    const groqResponse = await fetch(
-      "https://api.groq.com/openai/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${groqKey}`
-        },
-        body: JSON.stringify(payload)
-      }
-    );
-
-    const result = await groqResponse.json();
-
-    console.log(result);
-
-    const analysis =
-      result?.choices?.[0]?.message?.content ||
-      "No response received.";
-
-    output.innerText = analysis;
-
-  } catch (error) {
-
-    console.error(error);
-
-    output.innerHTML =
-      `<span style="color:red;">Error: ${error.message}</span>`;
-  }
+  return text
+    .replace(/\n/g, "<br>")
+    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
 }
 
 </script>
 
 </body>
 </html>
-```
