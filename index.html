@@ -103,9 +103,26 @@ Analyze employee attrition trends, department performance, hiring patterns, dive
 
 <script>
 
-function extractSheetId(url) {
-  const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
-  return match ? match[1] : null;
+function getGoogleSheetCSVUrl(sheetUrl) {
+
+  // Case 1: Already a published CSV URL
+  if (
+    sheetUrl.includes("output=csv") ||
+    sheetUrl.includes("/pub?")
+  ) {
+    return sheetUrl;
+  }
+
+  // Case 2: Standard editable Google Sheet URL
+  const match = sheetUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+
+  if (!match) {
+    throw new Error("Invalid Google Sheet URL");
+  }
+
+  const sheetId = match[1];
+
+  return `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`;
 }
 
 function convertToCSVUrl(sheetUrl) {
@@ -167,13 +184,19 @@ async function analyzeData() {
       return;
     }
 
-    const csvUrl = convertToCSVUrl(sheetUrl);
+    const csvUrl = getGoogleSheetCSVUrl(sheetUrl);
 
-    const csvResponse = await fetch(csvUrl);
+const csvResponse = await fetch(csvUrl);
 
-    if (!csvResponse.ok) {
-      throw new Error("Unable to fetch Google Sheet.");
-    }
+if (!csvResponse.ok) {
+  throw new Error(
+    `Google Sheet fetch failed: ${csvResponse.status}`
+  );
+}
+
+const csvText = await csvResponse.text();
+
+console.log(csvText);
 
     const csvText = await csvResponse.text();
 
